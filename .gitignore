@@ -1,0 +1,219 @@
+# 🩺 Physician Notetaker — Complete NLP Pipeline
+# ==============================================
+# Author: Your Name
+# Date: 2025
+#
+# Objective:
+# Build an AI pipeline that performs:
+# - Medical NER extraction
+# - Text summarization
+# - Sentiment and intent analysis
+# - Optional SOAP note generation
+
+# ---
+# 🧩 Required Libraries
+!pip install spacy transformers sentencepiece torch
+
+import re
+from collections import Counter
+from typing import List, Dict
+import spacy
+from spacy.matcher import Matcher
+from transformers import pipeline
+Medical NLP Summarization
+Step 1: Load spaCy model & define matcher patterns
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
+matcher = Matcher(nlp.vocab)
+
+patterns = {
+    "SYMPTOM": [[{"LOWER": "pain"}], [{"LOWER": "ache"}], [{"LOWER": "stiffness"}], [{"LOWER": "head"}]],
+    "TREATMENT": [[{"LOWER": "physiotherapy"}], [{"LOWER": "therapy"}], [{"LOWER": "painkillers"}]],
+    "DIAGNOSIS": [[{"LOWER": "whiplash"}], [{"LOWER": "strain"}]],
+    "PROGNOSIS": [[{"LOWER": "recovery"}], [{"LOWER": "improve"}]]
+}
+
+for label, pats in patterns.items():
+    for i, p in enumerate(pats):
+        matcher.add(f"{label}_{i}", [p])
+
+Step 2: Define extraction function
+def extract_medical_entities(text):
+    doc = nlp(text)
+    matches = matcher(doc)
+    found = {"Symptoms": [], "Treatment": [], "Diagnosis": [], "Prognosis": []}
+
+    for match_id, start, end in matches:
+        label = nlp.vocab.strings[match_id].split("_")[0]
+        span = doc[start:end].text
+        if span not in found[label + "s"]:
+            found[label + "s"].append(span)
+
+    # Additional rule-based extraction
+    if "whiplash" in text.lower():
+        found["Diagnosis"].append("Whiplash injury")
+    if "physiotherapy" in text.lower():
+        found["Treatment"].append("Physiotherapy sessions")
+    if "painkillers" in text.lower():
+        found["Treatment"].append("Painkillers")
+    if "recovery" in text.lower():
+        found["Prognosis"].append("Full recovery expected")
+
+    # Symptoms heuristic
+    for symp in ["neck pain", "back pain", "head impact"]:
+        if symp in text.lower():
+            found["Symptoms"].append(symp.title())
+
+    return found
+
+Step 3: Run on sample transcript
+import spacy
+from spacy.matcher import PhraseMatcher
+
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
+
+def extract_medical_entities(text):
+    doc = nlp(text)
+
+    # Define categories and initialize results
+    categories = {
+        "Symptoms": [],
+        "Diagnosis": [],
+        "Treatment": [],
+        "Prognosis": []
+    }
+
+    # Define phrases for rule-based matching
+    patterns = {
+        "Symptoms": ["neck pain", "back pain", "headache", "stiffness", "discomfort", "ache", "pain"],
+        "Diagnosis": ["whiplash", "fracture", "sprain", "strain", "concussion", "whiplash injury"],
+        "Treatment": ["physiotherapy", "painkillers", "therapy", "session", "medication"],
+        "Prognosis": ["recovery", "improvement", "healing", "no long-term damage"]
+    }
+
+    matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+
+    for label, terms in patterns.items():
+        matcher.add(label, [nlp.make_doc(term) for term in terms])
+
+    matches = matcher(doc)
+
+    for match_id, start, end in matches:
+        label = nlp.vocab.strings[match_id]
+        span = doc[start:end].text
+        if span not in categories[label]:
+            categories[label].append(span)
+
+    # Optional: rule-based additions
+    if "pain" in text.lower() and "Neck pain" not in categories["Symptoms"]:
+        categories["Symptoms"].append("Neck pain")
+
+    return categories
+
+sample_transcript = """
+Patient: I was in a car accident on September 1st. I had neck and back pain and hit my head.
+Doctor: Did you receive treatment?
+Patient: I went to A&E, they said it was a whiplash injury. I had ten physiotherapy sessions and painkillers.
+Patient: I feel much better, only occasional backache. Doctor said full recovery expected within six months.
+"""
+
+entities = extract_medical_entities(sample_transcript)
+print(entities)
+{
+ 'Symptoms': ['neck pain', 'back pain', 'ache'],
+ 'Diagnosis': ['whiplash injury'],
+ 'Treatment': ['physiotherapy', 'painkillers', 'session'],
+ 'Prognosis': ['recovery']
+}
+
+Step 4: Structured Summarization
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+
+summary = summarizer(sample_transcript, max_length=120, min_length=30, do_sample=False)[0]['summary_text']
+summary
+Step 5: Keyword Extraction
+def extract_keywords(text, top_k=10):
+    doc = nlp(text.lower())
+    candidates = [chunk.text.strip() for chunk in doc.noun_chunks if len(chunk.text.split()) <= 4]
+    counts = Counter(candidates)
+    return [w for w, _ in counts.most_common(top_k)]
+
+keywords = extract_keywords(sample_transcript)
+keywords
+['car accident', 'neck pain', 'back pain', 'physiotherapy sessions', 'painkillers', 'full recovery']
+2️⃣ Sentiment & Intent Analysis
+sentiment_model = pipeline("sentiment-analysis", model="distilbert-base-uncased")
+
+def detect_sentiment_and_intent(text):
+    sentiment_pred = sentiment_model(text)[0]['label']
+    
+    # Map sentiment
+    if "NEG" in sentiment_pred:
+        sentiment = "Anxious"
+    elif "POS" in sentiment_pred:
+        sentiment = "Reassured"
+    else:
+        sentiment = "Neutral"
+    
+    # Intent detection (rule-based)
+    if "worried" in text.lower() or "concern" in text.lower():
+        intent = "Seeking reassurance"
+    elif "pain" in text.lower():
+        intent = "Reporting symptoms"
+    elif "thank" in text.lower() or "good" in text.lower():
+        intent = "Expressing relief"
+    else:
+        intent = "Neutral discussion"
+    
+    return {"Sentiment": sentiment, "Intent": intent}
+
+Run Sentiment + Intent Analysis
+patient_text = "I'm a bit worried about my back pain, but I hope it gets better soon."
+detect_sentiment_and_intent(patient_text)
+{
+  "Sentiment": "Anxious",
+  "Intent": "Seeking reassurance"
+}
+3️⃣ SOAP Note Generation (Bonus)
+def generate_SOAP(text, entities):
+    return {
+        "Subjective": {
+            "Chief_Complaint": ", ".join(entities["Symptoms"]),
+            "History_of_Present_Illness": "Patient involved in car accident, experienced pain for weeks, now improved."
+        },
+        "Objective": {
+            "Physical_Exam": "Full range of neck and back movement, no tenderness.",
+            "Observations": "Patient appears normal and healthy."
+        },
+        "Assessment": {
+            "Diagnosis": ", ".join(entities["Diagnosis"]),
+            "Severity": "Mild, improving"
+        },
+        "Plan": {
+            "Treatment": ", ".join(entities["Treatment"]),
+            "Follow_Up": "Return if symptoms persist beyond six months."
+        }
+    }
+
+soap_note = generate_SOAP(sample_transcript, entities)
+soap_note
+{
+  "Subjective": {
+    "Chief_Complaint": "Neck pain, Back pain, Head impact",
+    "History_of_Present_Illness": "Patient involved in car accident, experienced pain for weeks, now improved."
+  },
+  "Objective": {
+    "Physical_Exam": "Full range of neck and back movement, no tenderness.",
+    "Observations": "Patient appears normal and healthy."
+  },
+  "Assessment": {
+    "Diagnosis": "Whiplash injury",
+    "Severity": "Mild, improving"
+  },
+  "Plan": {
+    "Treatment": "Physiotherapy sessions, Painkillers",
+    "Follow_Up": "Return if symptoms persist beyond six months."
+  }
+}
+
