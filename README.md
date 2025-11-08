@@ -205,9 +205,5 @@ Deploy as a Streamlit / Gradio app for clinical users
 👩‍💻 Author
 Ashwini Umande
 📧 ashwiniumande02@gmail.com
-🗓️ Project Date: November 2025
+🗓️ Project Date: 07 November 2025
 
-
----
-
-Would you like me to now **generate this README.md as a downloadable file (PDF or .md)** with your name and formatting preserved?
